@@ -1,116 +1,101 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+// controllers/authController.js
 import User from "../models/User.js";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
+// Generate JWT
+const generateToken = (id) => {
+  return jwt.sign({ userId: id }, process.env.JWT_SECRET, {
+    expiresIn: '30d'
+  });
+};
 
-// REGISTER
+// @desc    Register user
+// @route   POST /api/auth/register
+// @access  Public
 export const registerUser = async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // check email
+    // Check if user exists
     const userExists = await User.findOne({ email });
-
     if (userExists) {
       return res.status(400).json({
-        message: "User already exists",
+        success: false,
+        message: "User already exists"
       });
     }
 
-    // hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // create user
+    // Create user
     const user = await User.create({
       name,
       email,
-      password: hashedPassword,
-      role,
+      password,
+      role: role || 'buyer'
     });
 
-    // token
-    const token = jwt.sign(
-      {
-        id: user._id,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
-    res.status(201).json({
-      message: "User registered successfully",
-      token,
-
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
-
+    if (user) {
+      res.status(201).json({
+        success: true,
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        },
+        token: generateToken(user._id)
+      });
+    }
   } catch (error) {
+    console.error("Register error:", error);
     res.status(500).json({
-      message: error.message,
+      success: false,
+      message: error.message
     });
   }
 };
 
-
-// LOGIN
+// @desc    Login user
+// @route   POST /api/auth/login
+// @access  Public
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // check user
     const user = await User.findOne({ email });
-
+    
     if (!user) {
-      return res.status(400).json({
-        message: "Invalid email or password",
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password"
       });
     }
 
-    // compare password
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
-
+    // Check password
+    const isMatch = await user.matchPassword(password);
+    
     if (!isMatch) {
-      return res.status(400).json({
-        message: "Invalid email or password",
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password"
       });
     }
 
-    // token
-    const token = jwt.sign(
-      {
-        id: user._id,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
-    res.status(200).json({
-      message: "Login successful",
-      token,
-
+    res.json({
+      success: true,
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: user.role
       },
+      token: generateToken(user._id)
     });
-
   } catch (error) {
+    console.error("Login error:", error);
     res.status(500).json({
-      message: error.message,
+      success: false,
+      message: error.message
     });
   }
 };
